@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Traina — Choose a new password</title>
+  <link rel="icon" href="icon.png" />
+  <link rel="stylesheet" href="style.css?v=3" />
+  <style>
+    form { display: grid; gap: 12px; margin-top: 16px; }
+    label { font-size: 0.9rem; font-weight: 600; }
+    input[type=password] {
+      width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card); color: var(--fg);
+    }
+    button.primary {
+      padding: 13px; border: 0; border-radius: 10px; font-weight: 700; font-size: 1rem;
+      background: var(--primary); color: #0d1114; cursor: pointer;
+    }
+    button.primary:disabled { opacity: .6; cursor: default; }
+    .msg { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); }
+    .err { border-color: #c0392b; }
+    .hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <a class="brand" href="./"><img src="icon.png" alt="" />Traina</a>
+    </header>
+
+    <h1>Choose a new password</h1>
+
+    <div id="invalid" class="msg err" hidden>
+      <p><strong>This link has expired or was already used.</strong></p>
+      <p class="hint">Open Traina, tap <em>Log in → Forgot password?</em> and request a new link. Links work once and expire after an hour.</p>
+    </div>
+
+    <form id="form" hidden novalidate>
+      <p class="hint">For <strong id="who">your account</strong></p>
+      <label for="pw">New password</label>
+      <input id="pw" type="password" autocomplete="new-password" required />
+      <label for="pw2">Repeat new password</label>
+      <input id="pw2" type="password" autocomplete="new-password" required />
+      <p class="hint">At least 8 characters, with one letter and one number.</p>
+      <p id="formError" class="msg err" hidden></p>
+      <button id="save" class="primary" type="submit">Save new password</button>
+    </form>
+
+    <div id="done" class="msg" hidden>
+      <p><strong>Your password has been changed. ✅</strong></p>
+      <p class="hint">Open Traina and log in with your email and your new password.</p>
+    </div>
+
+    <footer>
+      Need help? <a href="support.html">Support</a> · <a href="privacy.html">Privacy Policy</a>
+    </footer>
+  </div>
+
+  <script>
+    // Public project URL and publishable key — the same ones the Traina app ships with.
+    const SUPABASE_URL = "https://hrblryjovhsfrvnhuewa.supabase.co";
+    const PUBLISHABLE_KEY = "sb_publishable_V9EV0Vk_e9wFGdONi48toQ_fewb1ug1";
+
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.hash.slice(1));
+    // Remove the one-time tokens from the address bar and browser history right away.
+    history.replaceState(null, "", location.pathname);
+
+    const token = params.get("access_token");
+    if (!token || params.get("type") !== "recovery" || params.get("error")) {
+      $("invalid").hidden = false;
+    } else {
+      $("form").hidden = false;
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        if (payload.email) $("who").textContent = payload.email;
+      } catch (_) { /* keep generic text */ }
+    }
+
+    const authFetch = (path, init) => fetch(SUPABASE_URL + "/auth/v1/" + path, {
+      ...init,
+      headers: { apikey: PUBLISHABLE_KEY, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    });
+
+    $("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pw = $("pw").value, pw2 = $("pw2").value;
+      const fail = (m) => { $("formError").textContent = m; $("formError").hidden = false; };
+      $("formError").hidden = true;
+      if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return fail("Use at least 8 characters, with one letter and one number.");
+      if (pw !== pw2) return fail("The two passwords don't match.");
+      $("save").disabled = true;
+      $("save").textContent = "Saving…";
+      try {
+        const res = await authFetch("user", { method: "PUT", body: JSON.stringify({ password: pw }) });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const m = body.msg || body.message || body.error_description || "";
+          if (res.status === 401 || res.status === 403) { $("form").hidden = true; $("invalid").hidden = false; return; }
+          fail(m ? "Couldn't save: " + m : "Couldn't save your new password. Please try again.");
+          return;
+        }
+        // Sign this browser out again — the person logs in inside the app.
+        await authFetch("logout", { method: "POST" }).catch(() => {});
+        $("form").hidden = true;
+        $("done").hidden = false;
+      } catch (_) {
+        fail("No connection. Check your internet and try again.");
+      } finally {
+        $("save").disabled = false;
+        $("save").textContent = "Save new password";
+      }
+    });
+  </script>
+</body>
+</html>
