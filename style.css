@@ -69,3 +69,7 @@ footer a { color: var(--muted); }
   nav { gap: 16px; margin-left: 0; width: 100%; }
   .hero { flex-direction: column; align-items: flex-start; }
 }
+
+/* Email addresses wrap as a whole instead of being split mid-address. */
+a[href^="mailto:"] { white-space: nowrap; font-weight: 600; }
+footer { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
